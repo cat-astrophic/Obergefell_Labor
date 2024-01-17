@@ -1,6 +1,6 @@
 # This script runs the analyses for the impact of marriage equality legislation on employment
 
-# Update the directories 'C:/Users/User/Documents/Data/PUMS/' and 'C:/Users/User/Documents/Data/Obergfell/' as appropriate
+# Update the directories 'C:/Users/Michael/Documents/Data/PUMS/' and 'C:/Users/Michael/Documents/Data/Obergfell/' as appropriate
 
 # Loading libraries
 
@@ -10,6 +10,8 @@ library(dplyr)
 library(progress)
 library(fastDummies)
 library(sandwich)
+library(lmtest)
+library(ggplot2)
 
 # Creating a list of column names to drop to save memory
 
@@ -23,7 +25,7 @@ meanhrs <- (maxhrs + minhrs) / 2 # Mean values
 
 # Reading in the data
 
-file_list <- list.files(path = 'C:/Users/User/Documents/Data/PUMS/', '.csv')
+file_list <- list.files(path = 'C:/Users/Michael/Documents/Data/PUMS/', '.csv')
 data <- data.frame()
 
 for (i in 1:19) {
@@ -33,10 +35,10 @@ for (i in 1:19) {
   yr <- 1999 + i # Current year
   print(yr) # Visualizing our progress
   print('Reading in household data.......') # Visualizing our progress
-  htemp <- read.csv(paste('C:/Users/User/Documents/Data/PUMS/', file_list[i], sep = '')) # Read in annual household data files
+  htemp <- read.csv(paste('C:/Users/Michael/Documents/Data/PUMS/', file_list[i], sep = '')) # Read in annual household data files
   htemp <- htemp[,(names(htemp) %in% keep)] # Dropping some extraneous columns
   print('Reading in personal data.......') # Visualizing our progress
-  ptemp <- read.csv(paste('C:/Users/User/Documents/Data/PUMS/', file_list[i+20], sep = '')) # Read in annual personal data file
+  ptemp <- read.csv(paste('C:/Users/Michael/Documents/Data/PUMS/', file_list[i+20], sep = '')) # Read in annual personal data file
   ptemp <- ptemp[,(names(ptemp) %in% keep)] # Dropping some extraneous columns
   print('Performing merge on SERIALNO.......') # Visualizing our progress
   temp <- merge(htemp, ptemp, by = c('SERIALNO')) # Merge on SERIALNO
@@ -191,7 +193,7 @@ equality <- c(2015,2014,2015,2014,2015,2013,2015,2014,2008,2013,
               2015,2015,2012,2013,2004,2015,2013,2015,2015,2014,
               2015,2014,2010,2013,2013,2011,2014,2015,2015,2014,
               2014,2014,2015,2013,2014,2015,2015,2015,2014,2009,
-              2014,2015,2012,2014,2014,2014) # Mapping of states to years when same sex marraige was legalized
+              2014,2015,2012,2014,2014,2014) # Mapping of states to years when same sex marriage was legalized
 
 # Creating additional data that were included in Hansen et al., 2019
 
@@ -219,15 +221,15 @@ rm(multitreat1) # Saving memory
 
 # Saving the finalized data.frame as a csv for future use
 
-write.csv(data,'C:/Users/User/Documents/Data/Obergefell/data.csv', row.names = FALSE)
+write.csv(data,'C:/Users/Michael/Documents/Data/Obergefell/data.csv', row.names = FALSE)
 
 # Generating summary statistics
 
 stargazer(data[which(data$YEAR >= 2009),], type = 'text') # Viewing the summary statistics
-write.csv(stargazer(data[which(data$YEAR >= 2009),]), 'C:/Users/User/Documents/Data/Obergefell/summary_statistics_all.txt', row.names = FALSE) # Writing them to file
+write.csv(stargazer(data[which(data$YEAR >= 2009),]), 'C:/Users/Michael/Documents/Data/Obergefell/summary_statistics_all.txt', row.names = FALSE) # Writing them to file
 
 stargazer(data, type = 'text') # Viewing the summary statistics
-write.csv(stargazer(data), 'C:/Users/User/Documents/Data/Obergefell/summary_statistics_all_all_years.txt', row.names = FALSE) # Writing them to file
+write.csv(stargazer(data), 'C:/Users/Michael/Documents/Data/Obergefell/summary_statistics_all_all_years.txt', row.names = FALSE) # Writing them to file
 
 # Running the regressions
 
@@ -241,13 +243,12 @@ m <- lm(WKHP ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = data2)
 
-stargazer(m, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m, type = 'HC0', cluster = data$PUMA)
-rse1 <- sqrt(diag(cov))
-stargazer(m, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse1), type = 'text')
-write.csv(stargazer(m, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse1)),
-          'C:/Users/User/Documents/Data/Obergefell/hours_worked_all.txt', row.names = FALSE)
-rm(m) # Save memory
+mx <- coeftest(m, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m, mx, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m, mx, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/hours_worked_all.txt', row.names = FALSE)
 
 # Annual hours worked
 
@@ -255,13 +256,12 @@ m1 <- lm(H52mean ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = data2)
 
-stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m1, type = 'HC0', cluster = data$PUMA)
-rse1 <- sqrt(diag(cov))
-stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse1), type = 'text')
-write.csv(stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse1)),
-          'C:/Users/User/Documents/Data/Obergefell/annual_hours_worked_(mean)_all.txt', row.names = FALSE)
-rm(m1) # Save memory
+m1x <- coeftest(m1, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m1, m1x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m1, m1x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/annual_hours_worked_(mean)_all.txt', row.names = FALSE)
 
 # Wage rate
 
@@ -269,13 +269,12 @@ m2 <- lm(WAGERATEmax ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST
         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = data2)
 
-stargazer(m2, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m2, type = 'HC0', cluster = data$PUMA)
-rse2 <- sqrt(diag(cov))
-stargazer(m2, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse2), type = 'text')
-write.csv(stargazer(m2, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse2)),
-          'C:/Users/User/Documents/Data/Obergefell/wage_rate_all.txt', row.names = FALSE)
-rm(m2) # Save memory
+m2x <- coeftest(m2, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m2, m2x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m2, m2x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+                   'C:/Users/Michael/Documents/Data/Obergefell/wage_rate_all.txt', row.names = FALSE)
 
 # Income
 
@@ -283,83 +282,77 @@ m3 <- lm(WAGP ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = data2)
 
-stargazer(m3, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m3, type = 'HC0', cluster = data$PUMA)
-rse3 <- sqrt(diag(cov))
-stargazer(m3, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse3), type = 'text')
-write.csv(stargazer(m3, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse3)),
-          'C:/Users/User/Documents/Data/Obergefell/income_all.txt', row.names = FALSE)
-rm(m3) # Save memory
+m3x <- coeftest(m3, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m3, m3x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m3, m3x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/income_all.txt', row.names = FALSE)
 
 # Labor force participation
 
-m4 <- glm(Participated ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+m4 <- lm(Participated ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
-        + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = data2, family = 'binomial')
+        + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = data2)
 
-stargazer(m4, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m4, type = 'HC0', cluster = data$PUMA)
-rse4 <- sqrt(diag(cov))
-stargazer(m4, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse4), type = 'text')
-write.csv(stargazer(m4, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse4)),
-          'C:/Users/User/Documents/Data/Obergefell/participation_all.txt', row.names = FALSE)
-rm(m4) # Save memory
+m4x <- coeftest(m4, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m4, m4x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m4, m4x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/participation_all.txt', row.names = FALSE)
 
 # Employed
 
-m5 <- glm(Employed ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+m5 <- lm(Employed ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
           + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
-          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = data2, family = 'binomial')
+          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = data2)
 
-stargazer(m5, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m5, type = 'HC0', cluster = data$PUMA)
-rse5 <- sqrt(diag(cov))
-stargazer(m5, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse5), type = 'text')
-write.csv(stargazer(m5, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse5)),
-          'C:/Users/User/Documents/Data/Obergefell/employed_all.txt', row.names = FALSE)
-rm(m5) # Save memory
+m5x <- coeftest(m5, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m5, m5x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m5, m5x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/employed_all.txt', row.names = FALSE)
 
 # Full time employment (40 hours per week threshold)
 
-m6 <- glm(Full40 ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+m6 <- lm(Full40 ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
           + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
-          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = data2, family = 'binomial')
+          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = data2)
 
-stargazer(m6, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m6, type = 'HC0', cluster = data$PUMA)
-rse6 <- sqrt(diag(cov))
-stargazer(m6, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse6), type = 'text')
-write.csv(stargazer(m6, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse6)),
-          'C:/Users/User/Documents/Data/Obergefell/full_time_40_all.txt', row.names = FALSE)
-rm(m6) # Save memory
+m6x <- coeftest(m6, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m6, m6x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m6, m6x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/full_time_40_all.txt', row.names = FALSE)
 
 # Full time employment (35 hours per week threshold)
 
-m7 <- glm(Full35 ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+m7 <- lm(Full35 ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
           + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
-          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = data2, family = 'binomial')
+          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = data2)
 
-stargazer(m7, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m7, type = 'HC0', cluster = data$PUMA)
-rse7 <- sqrt(diag(cov))
-stargazer(m7, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse7), type = 'text')
-write.csv(stargazer(m7, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse7)),
-          'C:/Users/User/Documents/Data/Obergefell/full_time_35_all.txt', row.names = FALSE)
-rm(m7) # Save memory
+m7x <- coeftest(m7, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m7, m7x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m7, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/full_time_35_all.txt', row.names = FALSE)
 
 # Repeat by gender for 2009-2018 time period
 
 gata <- data2[which(data2$SEX == 1),] # the data.frame for men
 lata <- data2[which(data2$SEX == 2),] # the data.frame for women
-rm(data2) # Save memory
 
 # Gay and Lesbian level summary statistics
 
 stargazer(gata, type = 'text') # Viewing the summary statistics
-write.csv(stargazer(gata), 'C:/Users/User/Documents/Data/Obergefell/summary_statistics_gay.txt', row.names = FALSE) # Writing them to file
+write.csv(stargazer(gata), 'C:/Users/Michael/Documents/Data/Obergefell/summary_statistics_gay.txt', row.names = FALSE) # Writing them to file
 
 stargazer(lata, type = 'text') # Viewing the summary statistics
-write.csv(stargazer(lata), 'C:/Users/User/Documents/Data/Obergefell/summary_statistics_lesbian.txt', row.names = FALSE) # Writing them to file
+write.csv(stargazer(lata), 'C:/Users/Michael/Documents/Data/Obergefell/summary_statistics_lesbian.txt', row.names = FALSE) # Writing them to file
 
 # Hours worked per year
 
@@ -367,13 +360,12 @@ m <- lm(WKHP ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = gata)
 
-stargazer(m, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m, type = 'HC0', cluster = data$PUMA)
-rse1 <- sqrt(diag(cov))
-stargazer(m, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse1), type = 'text')
-write.csv(stargazer(m, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse1)),
-          'C:/Users/User/Documents/Data/Obergefell/hours_worked_gay.txt', row.names = FALSE)
-rm(m) # Save memory
+mx <- coeftest(m, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m, mx, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/hours_worked_gay.txt', row.names = FALSE)
 
 # Annual hours worked
 
@@ -381,13 +373,12 @@ m1 <- lm(H52mean ~ GAY*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
          + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = gata)
 
-stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m1, type = 'HC0', cluster = data$PUMA)
-rse1 <- sqrt(diag(cov))
-stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse1), type = 'text')
-write.csv(stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse1)),
-          'C:/Users/User/Documents/Data/Obergefell/annual_hours_worked_(mean)_gay.txt', row.names = FALSE)
-rm(m1) # Save memory
+m1x <- coeftest(m1, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m1, m1x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/annual_hours_worked_(mean)_gay.txt', row.names = FALSE)
 
 # Wage rate
 
@@ -395,13 +386,12 @@ m2 <- lm(WAGERATEmax ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
          + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = gata)
 
-stargazer(m2, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m2, type = 'HC0', cluster = data$PUMA)
-rse2 <- sqrt(diag(cov))
-stargazer(m2, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse2), type = 'text')
-write.csv(stargazer(m2, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse2)),
-          'C:/Users/User/Documents/Data/Obergefell/wage_rate_gay.txt', row.names = FALSE)
-rm(m2) # Save memory
+m2x <- coeftest(m2, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m2, m2x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m2, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/wage_rate_gay.txt', row.names = FALSE)
 
 # Income
 
@@ -409,69 +399,64 @@ m3 <- lm(WAGP ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
          + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = gata)
 
-stargazer(m3, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m3, type = 'HC0', cluster = data$PUMA)
-rse3 <- sqrt(diag(cov))
-stargazer(m3, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse3), type = 'text')
-write.csv(stargazer(m3, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse3)),
-          'C:/Users/User/Documents/Data/Obergefell/income_gay.txt', row.names = FALSE)
-rm(m3) # Save memory
+m3x <- coeftest(m3, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m3, m3x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m3, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/income_gay.txt', row.names = FALSE)
 
 # Labor force participation
 
-m4 <- glm(Participated ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+m4 <- lm(Participated ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
           + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
-          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = gata, family = 'binomial')
+          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = gata)
 
-stargazer(m4, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m4, type = 'HC0', cluster = data$PUMA)
-rse4 <- sqrt(diag(cov))
-stargazer(m4, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse4), type = 'text')
-write.csv(stargazer(m4, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse4)),
-          'C:/Users/User/Documents/Data/Obergefell/participation_gay.txt', row.names = FALSE)
-rm(m4) # Save memory
+m4x <- coeftest(m4, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m4, m4x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m4, m4x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/participation_gay.txt', row.names = FALSE)
 
 # Employed
 
-m5 <- glm(Employed ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+m5 <- lm(Employed ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
           + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
-          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = gata, family = 'binomial')
+          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = gata)
 
-stargazer(m5, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m5, type = 'HC0', cluster = data$PUMA)
-rse5 <- sqrt(diag(cov))
-stargazer(m5, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse5), type = 'text')
-write.csv(stargazer(m5, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse5)),
-          'C:/Users/User/Documents/Data/Obergefell/employed_gay.txt', row.names = FALSE)
-rm(m5) # Save memory
+m5x <- coeftest(m5, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m5, m5x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m5, m5x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/employed_gay.txt', row.names = FALSE)
 
 # Full time employment (40 hours per week threshold)
 
-m6 <- glm(Full40 ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+m6 <- lm(Full40 ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
           + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
-          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = gata, family = 'binomial')
+          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = gata)
 
-stargazer(m6, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m6, type = 'HC0', cluster = data$PUMA)
-rse6 <- sqrt(diag(cov))
-stargazer(m6, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse6), type = 'text')
-write.csv(stargazer(m6, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse6)),
-          'C:/Users/User/Documents/Data/Obergefell/full_time_40_gay.txt', row.names = FALSE)
-rm(m6) # Save memory
+m6x <- coeftest(m6, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m6, m6x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m6, m6x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/full_time_40_gay.txt', row.names = FALSE)
 
 # Full time employment (35 hours per week threshold)
 
-m7 <- glm(Full35 ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+m7 <- lm(Full35 ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
           + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
-          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = gata, family = 'binomial')
+          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = gata)
 
-stargazer(m7, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m7, type = 'HC0', cluster = data$PUMA)
-rse7 <- sqrt(diag(cov))
-stargazer(m7, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse7), type = 'text')
-write.csv(stargazer(m7, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse7)),
-          'C:/Users/User/Documents/Data/Obergefell/full_time_35_gay.txt', row.names = FALSE)
-rm(m7) # Save memory
+m7x <- coeftest(m7, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m7, m7x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m7, m7x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse7)),
+          'C:/Users/Michael/Documents/Data/Obergefell/full_time_35_gay.txt', row.names = FALSE)
 
 # Hours worked per year
 
@@ -479,13 +464,12 @@ m <- lm(WKHP ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = lata)
 
-stargazer(m, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m, type = 'HC0', cluster = data$PUMA)
-rse1 <- sqrt(diag(cov))
-stargazer(m, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse1), type = 'text')
-write.csv(stargazer(m, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse1)),
-          'C:/Users/User/Documents/Data/Obergefell/hours_worked_lesbian.txt', row.names = FALSE)
-rm(m) # Save memory
+mx <- coeftest(m, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m, mx, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m, mx, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/hours_worked_lesbian.txt', row.names = FALSE)
 
 # Annual hours worked
 
@@ -493,13 +477,12 @@ m1 <- lm(H52mean ~ LESBIAN*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
          + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = lata)
 
-stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m1, type = 'HC0', cluster = data$PUMA)
-rse1 <- sqrt(diag(cov))
-stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse1), type = 'text')
-write.csv(stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse1)),
-          'C:/Users/User/Documents/Data/Obergefell/annual_hours_worked_(mean)_lesbian.txt', row.names = FALSE)
-rm(m1) # Save memory
+m1x <- coeftest(m1, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m1, m1x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/annual_hours_worked_(mean)_lesbian.txt', row.names = FALSE)
 
 # Wage rate
 
@@ -507,13 +490,12 @@ m2 <- lm(WAGERATEmax ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
          + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = lata)
 
-stargazer(m2, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m2, type = 'HC0', cluster = data$PUMA)
-rse2 <- sqrt(diag(cov))
-stargazer(m2, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse2), type = 'text')
-write.csv(stargazer(m2, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse2)),
-          'C:/Users/User/Documents/Data/Obergefell/wage_rate_lesbian.txt', row.names = FALSE)
-rm(m2) # Save memory
+m2x <- coeftest(m2, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m2, m2x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m2, m2x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/wage_rate_lesbian.txt', row.names = FALSE)
 
 # Income
 
@@ -521,103 +503,434 @@ m3 <- lm(WAGP ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
          + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = lata)
 
-stargazer(m3, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m3, type = 'HC0', cluster = data$PUMA)
-rse3 <- sqrt(diag(cov))
-stargazer(m3, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse3), type = 'text')
-write.csv(stargazer(m3, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse3)),
-          'C:/Users/User/Documents/Data/Obergefell/income_lesbian.txt', row.names = FALSE)
-rm(m3) # Save memory
+m3x <- coeftest(m3, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m3, m3x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m3, m3x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/income_lesbian.txt', row.names = FALSE)
 
 # Labor force participation
 
-m4 <- glm(Participated ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+m4 <- lm(Participated ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
           + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
-          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = lata, family = 'binomial')
+          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = lata)
 
-stargazer(m4, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m4, type = 'HC0', cluster = data$PUMA)
-rse4 <- sqrt(diag(cov))
-stargazer(m4, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse4), type = 'text')
-write.csv(stargazer(m4, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse4)),
-          'C:/Users/User/Documents/Data/Obergefell/participation_lesbian.txt', row.names = FALSE)
-rm(m4) # Save memory
+m4x <- coeftest(m4, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m4, m4x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m4, m4x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/participation_lesbian.txt', row.names = FALSE)
 
 # Employed
 
-m5 <- glm(Employed ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+m5 <- lm(Employed ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
           + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
-          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = lata, family = 'binomial')
+          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = lata)
 
-stargazer(m5, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m5, type = 'HC0', cluster = data$PUMA)
-rse5 <- sqrt(diag(cov))
-stargazer(m5, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse5), type = 'text')
-write.csv(stargazer(m5, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse5)),
-          'C:/Users/User/Documents/Data/Obergefell/employed_lesbian.txt', row.names = FALSE)
-rm(m5) # Save memory
+m5x <- coeftest(m5, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m5, m5x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m5, m5x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/employed_lesbian.txt', row.names = FALSE)
 
 # Full time employment (40 hours per week threshold)
 
-m6 <- glm(Full40 ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+m6 <- lm(Full40 ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
           + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
-          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = lata, family = 'binomial')
+          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = lata)
 
-stargazer(m6, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m6, type = 'HC0', cluster = data$PUMA)
-rse6 <- sqrt(diag(cov))
-stargazer(m6, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse6), type = 'text')
-write.csv(stargazer(m6, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse6)),
-          'C:/Users/User/Documents/Data/Obergefell/full_time_40_lesbian.txt', row.names = FALSE)
-rm(m6) # Save memory
+m6x <- coeftest(m6, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m6, m6x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m6, m6x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/full_time_40_lesbian.txt', row.names = FALSE)
 
 # Full time employment (35 hours per week threshold)
 
-m7 <- glm(Full35 ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+m7 <- lm(Full35 ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
           + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
-          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = lata, family = 'binomial')
+          + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = lata)
 
-stargazer(m7, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
-cov <- vcovHC(m7, type = 'HC0', cluster = data$PUMA)
-rse7 <- sqrt(diag(cov))
-stargazer(m7, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse7), type = 'text')
-write.csv(stargazer(m7, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), se = list(rse7)),
-          'C:/Users/User/Documents/Data/Obergefell/full_time_35_lesbian.txt', row.names = FALSE)
-rm(m7) # Save memory
+m7x <- coeftest(m7, vcov = vcovCL, cluster = ~PUMA)
 
+stargazer(m7, m7x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
 
+write.csv(stargazer(m7, m7x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/full_time_35_lesbian.txt', row.names = FALSE)
 
+# Matching method
 
+data2 <- data[which(data$YEAR >= 2009),] # data.frame for this time period
 
+data2$ID <- 1:nrow(data2)
+df <- data2 %>% filter(QUEER == 1)
+controls <- data2 %>% filter(QUEER == 0)
+matches <- c()
+misses <- c()
 
+for (i in 1:nrow(df)) {
+  
+  print(paste('Matching for unit', i, 'of', nrow(df), '.......', sep = ' '))
+  
+  tmp <- controls %>% filter(SEX == df$SEX[i])
+  tmp <- tmp %>% filter(ST == df$ST[i])
+  tmp <- tmp %>% filter(PUMA == df$PUMA[i])
+  tmp <- tmp %>% filter(NAICSP == df$NAICSP[i])
+  tmp <- tmp %>% filter(AGEP == df$AGEP[i])
+  
+  if (nrow(tmp) > 0) {
+    
+    matches <- c(matches, tmp$ID)
+    
+  } else {
+    
+    misses <- c(misses, i)  
+    
+  }
+  
+}
 
-# data <- read.csv('C:/Users/User/Documents/Data/Obergefell/data.csv')
+ids <- unique(matches)
+keeps <- ifelse(1:nrow(df) %in% misses, 0, 1)
+controls <- controls %>% filter(ID %in% ids)
+df$Keep <- keeps
+df <- df %>% filter(Keep == 1)
+df <- df[,1:50]
+df <- rbind(df, controls)
 
+# Generating summary statistics for the matched data
 
+stargazer(df, type = 'text') # Viewing the summary statistics
+write.csv(stargazer(df), 'C:/Users/Michael/Documents/Data/Obergefell/matched_summary_statistics_all.txt', row.names = FALSE) # Writing them to file
 
+# Running matched regressions
 
+# Hours worked per week
 
-# repeat this with multi-period DID models
+m <- lm(WKHP ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+        + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+        + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = df)
 
-# repeat everything over full time period with NA controls removed (can rm data2 here) -- these can be robustness checks
+mx <- coeftest(m, vcov = vcovCL, cluster = ~PUMA)
 
-# need to also run H52min and H52mean throughout everything
+stargazer(m, mx, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
 
-# should i log wage, hours?
+write.csv(stargazer(m, mx, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_hours_worked_all.txt', row.names = FALSE)
 
+# Annual hours worked
 
+m1 <- lm(H52mean ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = df)
 
-# need a common trends plot for straight men v gay men and straight women v lesbian women
+m1x <- coeftest(m1, vcov = vcovCL, cluster = ~PUMA)
 
-# plot annual means for straight men, gay men, straight women, lesbian women in 4 different colors and add trend lines
-# add vertical line at effect year
-# do this for individual state(s); for all states in a given year for all such years (relatively few plots - include which states in each description)
+stargazer(m1, m1x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
 
-# need to make gay and lesbian summary statistics for all years (subset from data)
+write.csv(stargazer(m1, m1x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_annual_hours_worked_(mean)_all.txt', row.names = FALSE)
 
+# Wage rate
 
+m2 <- lm(WAGERATEmax ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = df)
 
+m2x <- coeftest(m2, vcov = vcovCL, cluster = ~PUMA)
 
+stargazer(m2, m2x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
 
+write.csv(stargazer(m2, m2x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_wage_rate_all.txt', row.names = FALSE)
 
+# Income
+
+m3 <- lm(WAGP ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = df)
+
+m3x <- coeftest(m3, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m3, m3x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m3, m3x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_income_all.txt', row.names = FALSE)
+
+# Labor force participation
+
+m4 <- lm(Participated ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = df)
+
+m4x <- coeftest(m4, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m4, m4x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m4, m4x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_participation_all.txt', row.names = FALSE)
+
+# Employed
+
+m5 <- lm(Employed ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = df)
+
+m5x <- coeftest(m5, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m5, m5x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m5, m5x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_employed_all.txt', row.names = FALSE)
+
+# Full time employment (40 hours per week threshold)
+
+m6 <- lm(Full40 ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = df)
+
+m6x <- coeftest(m6, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m6, m6x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m6, m6x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_full_time_40_all.txt', row.names = FALSE)
+
+# Full time employment (35 hours per week threshold)
+
+m7 <- lm(Full35 ~ QUEER*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = df)
+
+m7x <- coeftest(m7, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m7, m7x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m7, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_full_time_35_all.txt', row.names = FALSE)
+
+# Repeat by gender for 2009-2018 time period
+
+dfg <- df[which(df$SEX == 1),] # the data.frame for men
+dfl <- df[which(df$SEX == 2),] # the data.frame for women
+
+# Gay and Lesbian level summary statistics
+
+stargazer(dfg, type = 'text') # Viewing the summary statistics
+write.csv(stargazer(dfg), 'C:/Users/Michael/Documents/Data/Obergefell/matched_summary_statistics_gay.txt', row.names = FALSE) # Writing them to file
+
+stargazer(dfl, type = 'text') # Viewing the summary statistics
+write.csv(stargazer(dfl), 'C:/Users/Michael/Documents/Data/Obergefell/matched_summary_statistics_lesbian.txt', row.names = FALSE) # Writing them to file
+
+# Hours worked per year
+
+m <- lm(WKHP ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+        + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+        + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfg)
+
+mx <- coeftest(m, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m, mx, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_hours_worked_gay.txt', row.names = FALSE)
+
+# Annual hours worked
+
+m1 <- lm(H52mean ~ GAY*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfg)
+
+m1x <- coeftest(m1, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m1, m1x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_annual_hours_worked_(mean)_gay.txt', row.names = FALSE)
+
+# Wage rate
+
+m2 <- lm(WAGERATEmax ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfg)
+
+m2x <- coeftest(m2, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m2, m2x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m2, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_wage_rate_gay.txt', row.names = FALSE)
+
+# Income
+
+m3 <- lm(WAGP ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfg)
+
+m3x <- coeftest(m3, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m3, m3x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m3, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_income_gay.txt', row.names = FALSE)
+
+# Labor force participation
+
+m4 <- lm(Participated ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfg)
+
+m4x <- coeftest(m4, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m4, m4x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m4, m4x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_participation_gay.txt', row.names = FALSE)
+
+# Employed
+
+m5 <- lm(Employed ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfg)
+
+m5x <- coeftest(m5, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m5, m5x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m5, m5x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_employed_gay.txt', row.names = FALSE)
+
+# Full time employment (40 hours per week threshold)
+
+m6 <- lm(Full40 ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfg)
+
+m6x <- coeftest(m6, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m6, m6x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m6, m6x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_full_time_40_gay.txt', row.names = FALSE)
+
+# Full time employment (35 hours per week threshold)
+
+m7 <- lm(Full35 ~ GAY*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfg)
+
+m7x <- coeftest(m7, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m7, m7x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m7, m7x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_full_time_35_gay.txt', row.names = FALSE)
+
+# Hours worked per year
+
+m <- lm(WKHP ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+        + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+        + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfl)
+
+mx <- coeftest(m, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m, mx, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m, mx, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_hours_worked_lesbian.txt', row.names = FALSE)
+
+# Annual hours worked
+
+m1 <- lm(H52mean ~ LESBIAN*TREAT1 + factor(SEX) + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfl)
+
+m1x <- coeftest(m1, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m1, m1x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m1, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_annual_hours_worked_(mean)_lesbian.txt', row.names = FALSE)
+
+# Wage rate
+
+m2 <- lm(WAGERATEmax ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfl)
+
+m2x <- coeftest(m2, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m2, m2x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m2, m2x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_wage_rate_lesbian.txt', row.names = FALSE)
+
+# Income
+
+m3 <- lm(WAGP ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfl)
+
+m3x <- coeftest(m3, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m3, m3x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m3, m3x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_income_lesbian.txt', row.names = FALSE)
+
+# Labor force participation
+
+m4 <- lm(Participated ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfl)
+
+m4x <- coeftest(m4, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m4, m4x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m4, m4x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_participation_lesbian.txt', row.names = FALSE)
+
+# Employed
+
+m5 <- lm(Employed ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfl)
+
+m5x <- coeftest(m5, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m5, m5x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m5, m5x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_employed_lesbian.txt', row.names = FALSE)
+
+# Full time employment (40 hours per week threshold)
+
+m6 <- lm(Full40 ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfl)
+
+m6x <- coeftest(m6, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m6, m6x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m6, m6x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_full_time_40_lesbian.txt', row.names = FALSE)
+
+# Full time employment (35 hours per week threshold)
+
+m7 <- lm(Full35 ~ LESBIAN*TREAT1 + AGEP + I(AGEP^2) + factor(ST)
+         + PARTNERINC + factor(DIS) + factor(RAC1P) + factor(MAR)
+         + factor(SCHL) + NOC + factor(NAICSP) + factor(YEAR), data = dfl)
+
+m7x <- coeftest(m7, vcov = vcovCL, cluster = ~PUMA)
+
+stargazer(m7, m7x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR'), type = 'text')
+
+write.csv(stargazer(m7, m7x, omit = c('NAICSP', 'MAR', 'SCHL', 'ST', 'YEAR')),
+          'C:/Users/Michael/Documents/Data/Obergefell/matched_full_time_35_lesbian.txt', row.names = FALSE)
 
